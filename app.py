@@ -4,72 +4,101 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import pandas as pd
 
-# -----------------------------
+# =============================
 # PAGE CONFIG
-# -----------------------------
-st.set_page_config(page_title="Image Pooling Playground", layout="wide")
-st.title("🧠 Interactive Image Pooling Playground")
-
-st.write(
-    "Upload an image and experiment with grayscale conversion and CNN pooling "
-    "using fully customizable parameters."
+# =============================
+st.set_page_config(
+    page_title="VisionPool Studio",
+    layout="wide"
 )
 
-# -----------------------------
-# SIDEBAR CONTROLS
-# -----------------------------
-st.sidebar.header("⚙️ Controls")
+# =============================
+# HEADER
+# =============================
+st.markdown(
+    """
+    <h1 style='text-align:center;'>🎨 VisionPool Studio</h1>
+    <h4 style='text-align:center; color:gray;'>
+    Interactive CNN Pooling Visualizer
+    </h4>
+    <hr>
+    """,
+    unsafe_allow_html=True
+)
 
-# Grayscale
+st.write(
+    "Upload an image, choose grayscale size, pooling window, pooling type, and stride "
+    "to visually understand CNN pooling."
+)
+
+# =============================
+# SIDEBAR CONTROLS
+# =============================
+st.sidebar.title("🧭 Control Panel")
+
+# -------- Matrix settings --------
+st.sidebar.subheader("1️⃣ Grayscale Settings")
+gray_size = st.sidebar.radio(
+    "Grayscale Matrix Size",
+    [8, 16, 32],
+    horizontal=True
+)
+
 gray_method = st.sidebar.selectbox(
     "Grayscale Conversion",
     ["Average", "Luminosity"]
 )
 
-gray_size = st.sidebar.selectbox(
-    "Grayscale Matrix Size",
-    [8, 16, 32]
-)
+# -------- Pooling settings --------
+st.sidebar.subheader("2️⃣ Pooling Settings")
 
-# Pooling
-pool_type = st.sidebar.selectbox(
+pool_type = st.sidebar.radio(
     "Pooling Type",
-    ["max", "min", "avg"]
+    ["max", "min", "avg"],
+    horizontal=True
 )
 
-pool_h = st.sidebar.selectbox("Pooling Height", [2, 3, 4])
-pool_w = st.sidebar.selectbox("Pooling Width", [2, 3, 4])
+pool_window = st.sidebar.selectbox(
+    "Pooling Window Size",
+    ["2x2", "2x3", "3x2", "3x3", "3x4", "4x3", "4x4"]
+)
 
-overlap = st.sidebar.checkbox("Overlapping Pooling", value=False)
-stride = 1 if overlap else st.sidebar.selectbox("Stride", [2, 3, 4])
+stride = st.sidebar.slider(
+    "Stride",
+    min_value=1,
+    max_value=10,
+    value=2
+)
 
-round_avg = st.sidebar.checkbox("Round Average Pooling", value=True)
-
-# Visualization
-st.sidebar.header("🎨 Visualization")
-show_numbers = st.sidebar.checkbox("Show Numbers", value=True)
+# -------- Display settings --------
+st.sidebar.subheader("3️⃣ Display Settings")
+show_numbers = st.sidebar.checkbox("Show Numbers", True)
 font_size = st.sidebar.slider("Font Size", 5, 14, 7)
-text_color = st.sidebar.selectbox("Text Color", ["red", "black", "blue"])
 colormap = st.sidebar.selectbox(
     "Color Map",
     ["gray", "viridis", "plasma", "inferno"]
 )
 
-# -----------------------------
+# =============================
 # IMAGE UPLOAD
-# -----------------------------
+# =============================
+st.markdown("## 📤 Step 1: Upload Image")
 uploaded_file = st.file_uploader(
-    "📤 Upload an image",
+    "Upload JPG / PNG image",
     type=["jpg", "jpeg", "png"]
 )
 
-# -----------------------------
-# POOLING FUNCTION
-# -----------------------------
+# =============================
+# FUNCTIONS
+# =============================
 def pooling(matrix, ph, pw, stride, mode):
     h, w = matrix.shape
     out_h = (h - ph) // stride + 1
     out_w = (w - pw) // stride + 1
+
+    if out_h <= 0 or out_w <= 0:
+        return None
+
     pooled = np.zeros((out_h, out_w))
 
     for i in range(out_h):
@@ -87,9 +116,6 @@ def pooling(matrix, ph, pw, stride, mode):
 
     return pooled
 
-# -----------------------------
-# DISPLAY MATRIX
-# -----------------------------
 def show_matrix(matrix, title):
     fig, ax = plt.subplots()
     ax.imshow(matrix, cmap=colormap)
@@ -102,22 +128,24 @@ def show_matrix(matrix, title):
                 ax.text(
                     j, i, int(matrix[i, j]),
                     ha="center", va="center",
-                    color=text_color, fontsize=font_size
+                    fontsize=font_size,
+                    color="red"
                 )
     return fig
 
-# -----------------------------
+# =============================
 # MAIN LOGIC
-# -----------------------------
+# =============================
 if uploaded_file:
 
     img = Image.open(uploaded_file).convert("RGB")
-    st.subheader("📸 Original Image")
+
+    st.markdown("## 🖼️ Step 2: Original Image")
     st.image(img, use_column_width=True)
 
     img_array = np.array(img)
 
-    # Grayscale conversion
+    # Grayscale
     if gray_method == "Average":
         gray = img_array.mean(axis=2)
     else:
@@ -133,34 +161,41 @@ if uploaded_file:
         Image.fromarray(gray).resize((gray_size, gray_size))
     )
 
+    # Parse pooling window
+    ph, pw = map(int, pool_window.split("x"))
+
     pooled_matrix = pooling(
-        gray_matrix, pool_h, pool_w, stride, pool_type
+        gray_matrix, ph, pw, stride, pool_type
     )
 
-    if pool_type == "avg" and round_avg:
-        pooled_matrix = np.round(pooled_matrix)
+    st.markdown("## 🧩 Step 3: Results")
 
-    # Layout
-    col1, col2 = st.columns(2)
+    if pooled_matrix is None:
+        st.error("❌ Pooling window and stride are too large for the selected matrix.")
+    else:
+        tab1, tab2 = st.tabs(["Grayscale Matrix", "Pooling Output"])
 
-    with col1:
-        st.subheader(f"Grayscale Matrix ({gray_size}×{gray_size})")
-        st.pyplot(show_matrix(gray_matrix, "Grayscale Matrix"))
-        st.dataframe(pd.DataFrame(gray_matrix))
+        with tab1:
+            st.pyplot(show_matrix(
+                gray_matrix,
+                f"Grayscale Matrix ({gray_size}×{gray_size})"
+            ))
+            st.dataframe(pd.DataFrame(gray_matrix))
 
-    with col2:
-        st.subheader("Pooling Output")
-        st.pyplot(show_matrix(pooled_matrix, "Pooled Output"))
-        st.dataframe(pd.DataFrame(pooled_matrix))
+        with tab2:
+            st.pyplot(show_matrix(
+                pooled_matrix,
+                f"{pool_type.upper()} Pooling ({pool_window}, stride={stride})"
+            ))
+            st.dataframe(pd.DataFrame(pooled_matrix))
 
-    # Download
-    csv = pd.DataFrame(pooled_matrix).to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "⬇️ Download Pooled Output (CSV)",
-        csv,
-        "pooled_output.csv",
-        "text/csv"
-    )
+        csv = pd.DataFrame(pooled_matrix).to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "⬇️ Download Pooled Matrix (CSV)",
+            csv,
+            "pooled_output.csv",
+            "text/csv"
+        )
 
 else:
-    st.info("👆 Upload an image to begin.")
+    st.info("👆 Upload an image to start.")
